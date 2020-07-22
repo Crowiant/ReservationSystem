@@ -14,10 +14,10 @@ def create_reservation(guest, req_table):
     for table in all_tables:
         tables_id.append(str(table.id))
     if req_table['id'] not in tables_id:
-        return f"Table with id: {req_table['id']} does not exist"
+        return False, f"Table with id: {req_table['id']} does not exist"
 
     if not validate_datetime(req_table['data_from'], req_table['data_to']):
-        return 'Datetime error'
+        return False, 'Datetime error'
 
     # Check guest in db
     guest_status = Guest.query.filter_by(phone_number=guest['phone']).first()
@@ -36,7 +36,7 @@ def create_reservation(guest, req_table):
 
     if reservations:
         # If found reserv in db
-        return 'Table already reserv for this time'
+        return False, 'Table already reserv for this time'
     new_reservation = Reservation(guest=guest_status, table=Table.query.get(int(req_table['id'])),
                                   reservation_time_from=req_table['data_from'],
                                   reservation_time_to=req_table['data_to']
@@ -46,7 +46,7 @@ def create_reservation(guest, req_table):
     db.session.commit()
     result = 'Created'
 
-    return result
+    return True, result
 
 
 def validate_datetime(date_from, date_to):
