@@ -12,10 +12,10 @@ def make_table(id, floor, room):
 
 
 with app.app_context():
-    id = 0
-    for floor in range(2):
-        for room in range(10):
-            id += 1
-            make_table(id, floor, room)
+    table_id = 0
+    for floor in range(1, 3):
+        for room in range(1, 11):
+            table_id += 1
+            make_table(table_id, floor, room)
 
 

@@ -1,52 +1,79 @@
 from datetime import datetime
+from dateutil import parser
 from webapp import db
+from sqlalchemy import and_
+from sqlalchemy.orm import load_only
 from webapp.reservation.models import Table, Guest, Reservation
-from webapp.config import DEFAULT_RESERVATION_LENGTH
+from webapp.config import SPACE_OPEN_HOUR, SPACE_CLOSE_HOUR
 
 
-def create_reservation(form_data):
-    guest = Guest.query.filter_by(phone_number=form_data.guest_phone.data).first()
+def create_reservation(guest, req_table):
+    all_tables = Table.query.options(load_only('id')).all()
+    tables_id = []
 
-    if guest is None:
-        guest = Guest(name=form_data.guest_name.data, phone_number=form_data.guest_phone.data)
-        db.session.add(guest)
+    for table in all_tables:
+        tables_id.append(str(table.id))
+    if req_table['id'] not in tables_id:
+        return f"Table with id: {req_table['id']} does not exist"
 
-    # now check table availability
-    capacity = int(form_data.num_guests.data)
-    tables = Table.query.filter(Table.capacity >= capacity).order_by(Table.capacity.desc()).all()
-    t_ids = [t.id for t in tables]
+    if not validate_datetime(req_table['data_from'], req_table['data_to']):
+        return 'Datetime error'
 
-    if not t_ids:
-        # no tables with that size
-        return False
+    # Check guest in db
+    guest_status = Guest.query.filter_by(phone_number=guest['phone']).first()
 
-    # check reservations
-    begin_range = form_data.reservation_datetime.data - datetime.timedelta(hours=DEFAULT_RESERVATION_LENGTH)
-    end_range = form_data.reservation_datetime.data + datetime.timedelta(hours=DEFAULT_RESERVATION_LENGTH)
-    # reservations = Reservation.query.filter(Reservation.table.in_(
-    #     t_ids), Reservation.reservation_time >= begin_range, Reservation.reservation_time <= end_range).all()
-    reservations = Reservation.query.join(Reservation.table).filter(Table.id.in_(t_ids),
-                                                                    Reservation.reservation_time >= begin_range,
-                                                                    Reservation.reservation_time <= end_range).order_by(
-                                                                    Table.capacity.desc()).all()
+    # Create if guest first time reserv
+    if not guest_status:
+        guest_status = Guest(name=guest['name'], phone_number=guest['phone'], email=guest['email'])
+        db.session.add(guest_status)
+
+    reservations = Reservation.query\
+        .join(Reservation.table)\
+        .filter(Table.id == req_table['id'],
+                and_(Reservation.reservation_time_from >= req_table['data_from'], Reservation.reservation_time_from < req_table['data_to'])
+                )\
+        .all()
 
     if reservations:
-        if len(t_ids) == len(reservations):
-            # no available tables, sorry
-            # still add guest
-            db.session.commit()
-            return False
-        else:
-            # get available table
-            table_id = (set(t_ids) - set([r.table.id for r in reservations])).pop()
-            reservation = Reservation(guest=guest, table=Table.query.get(int(table_id)),
-                                      num_guests=capacity, reservation_time=form_data.reservation_datetime.data)
-    else:
-        # we are totally open
-        reservation = Reservation(guest=guest, table=Table.query.get(int(t_ids[0])), num_guests=capacity,
-                                  reservation_time=form_data.reservation_datetime.data)
+        # If found reserv in db
+        return 'Table already reserv for this time'
+    new_reservation = Reservation(guest=guest_status, table=Table.query.get(int(req_table['id'])),
+                                  reservation_time_from=req_table['data_from'],
+                                  reservation_time_to=req_table['data_to']
+                                  )
 
-    db.session.add(reservation)
+    db.session.add(new_reservation)
     db.session.commit()
+    result = 'Created'
 
-    return reservation
+    return result
+
+
+def validate_datetime(date_from, date_to):
+    # Validate ISO format of string
+    try:
+        data_from_iso = parser.isoparse(date_from)
+        data_to_iso = parser.isoparse(date_to)
+    except ValueError:
+        return False
+
+    # Validate absence of values in minutes, seconds, microseconds
+    time_from = data_from_iso.time()
+    time_to = data_to_iso.time()
+    fr_minutes, fr_seconds, fr_microseconds = time_from.minute, time_from.second, time_from.microsecond
+    to_minutes, to_seconds, to_microseconds = time_to.minute, time_to.second, time_to.microsecond
+    if (fr_minutes or fr_seconds or fr_microseconds) or (to_minutes or to_seconds or to_microseconds):
+        return False
+
+    # Check schedule of Space
+    if (time_from < SPACE_OPEN_HOUR or time_from > SPACE_CLOSE_HOUR) or (
+        time_to > SPACE_CLOSE_HOUR or time_to < SPACE_OPEN_HOUR
+    ):
+        return False
+
+    # Validate that datetimes are not in the past
+    if datetime.now() > data_from_iso or datetime.now() > data_to_iso:
+        return False
+
+    return True
+
