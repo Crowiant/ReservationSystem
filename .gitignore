@@ -2,8 +2,8 @@
 *.log
 .idea/
 venv/
-./webapp/config.py
-./requirements.txt
-./tests.py
-./db_script.py
-./migrations
+webapp/config.py
+requirements.txt
+tests.py
+db_script.py
+migrations/
