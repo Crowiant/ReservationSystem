@@ -1,16 +1,19 @@
 from flask import Blueprint, request, jsonify
+from webapp.auth_check import auth
 from webapp.reservation.controllers import create_reservation
+
 
 blueprint = Blueprint('reserv', __name__, url_prefix='/reserv')
 
 
 @blueprint.route('/', methods=['POST'])
+@auth.login_required
 def reservation():
     # Validate fields guest, table
     try:
         guest_data = request.json['guest']
         guest_reserv = request.json['table']
-    except KeyError:
+    except TypeError:
         return 'No guest or table data'
 
     # Validate data in fields guest and table

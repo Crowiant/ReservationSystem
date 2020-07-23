@@ -10,7 +10,7 @@ from webapp.config import SPACE_OPEN_HOUR, SPACE_CLOSE_HOUR
 def create_reservation(guest, req_table):
     all_tables = Table.query.options(load_only('id')).all()
     tables_id = []
-
+    # Validate that we have an id of table in our db
     for table in all_tables:
         tables_id.append(str(table.id))
     if req_table['id'] not in tables_id:
@@ -27,14 +27,14 @@ def create_reservation(guest, req_table):
         guest_status = Guest(name=guest['name'], phone_number=guest['phone'], email=guest['email'])
         db.session.add(guest_status)
 
-    reservations = Reservation.query\
+    reservations_exist = Reservation.query\
         .join(Reservation.table)\
         .filter(Table.id == req_table['id'],
                 and_(Reservation.reservation_time_from >= req_table['data_from'], Reservation.reservation_time_from < req_table['data_to'])
                 )\
         .all()
 
-    if reservations:
+    if reservations_exist:
         # If found reserv in db
         return False, 'Table already reserv for this time'
     new_reservation = Reservation(guest=guest_status, table=Table.query.get(int(req_table['id'])),
@@ -55,6 +55,10 @@ def validate_datetime(date_from, date_to):
         data_from_iso = parser.isoparse(date_from)
         data_to_iso = parser.isoparse(date_to)
     except ValueError:
+        return False
+
+    # Check equal of input time
+    if date_from == date_to:
         return False
 
     # Validate absence of values in minutes, seconds, microseconds
