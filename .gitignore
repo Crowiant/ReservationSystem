@@ -1,4 +1,9 @@
 *.pyc
 *.log
 .idea/
-env/
+venv/
+./webapp/config.py
+./requirements.txt
+./tests.py
+./db_script.py
+./migrations
